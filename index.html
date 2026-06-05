@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carte des collecteurs — SCEA Château de Presles</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; background: #f0f2ef; padding: 16px; font-size: 14px; }
+  h1 { font-size: 20px; color: #1C4E2A; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #777; margin-bottom: 16px; }
+  .layout { display: grid; grid-template-columns: 1fr 320px; gap: 14px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+  #map-box { border: 1px solid #ccc; border-radius: 10px; overflow: hidden; background: #fff; }
+  #map { height: 560px; width: 100%; }
+  .panel { background: #fff; border: 1px solid #ddd; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .panel h3 { font-size: 15px; font-weight: 600; margin-bottom: 10px; color: #1C4E2A; }
+  .field { margin-bottom: 9px; }
+  .field label { display: block; font-size: 11px; color: #555; margin-bottom: 3px; font-weight: 600; }
+  .field input, .field select, .field textarea { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; font-family: inherit; }
+  .field textarea { resize: vertical; min-height: 40px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn { width: 100%; padding: 9px; border: none; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+  .btn:hover { opacity: .88; }
+  .btn-add { background: #1C4E2A; color: #fff; }
+  .btn-export { background: #C5891A; color: #fff; margin-top: 6px; }
+  .btn-sm { font-size: 11px; padding: 3px 8px; border-radius: 5px; border: none; cursor: pointer; background: #8C1A1A; color: #fff; }
+  .filter-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; align-items: center; }
+  .fb { font-size: 11px; padding: 3px 10px; border-radius: 20px; border: 1px solid #ccc; background: #fff; cursor: pointer; color: #666; }
+  .fb.on { font-weight: 600; border-color: currentColor; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }
+  th { background: #f5f5f5; font-weight: 600; padding: 6px 6px; text-align: left; border-bottom: 1px solid #ddd; white-space: nowrap; }
+  td { padding: 5px 6px; border-bottom: 1px solid #eee; vertical-align: middle; }
+  tr:hover td { background: #f9f9f9; }
+  .pill { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+  .legend { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; font-size: 12px; color: #555; }
+  .ld { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .meth { background: #f5f5f5; border-left: 3px solid #C5891A; border-radius: 0 6px 6px 0; padding: 8px 12px; font-size: 11px; color: #555; line-height: 1.6; margin-top: 8px; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1C4E2A; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 9999; }
+  .toast.show { opacity: 1; }
+  .leaflet-popup-content-wrapper { border-radius: 10px; }
+  .popup-box { font-size: 12px; line-height: 1.5; min-width: 230px; }
+  .popup-box b { font-size: 13px; display: block; margin-bottom: 3px; }
+  .popup-box .prow { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid #eee; gap: 8px; }
+  .popup-box .ptag { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; margin-bottom: 5px; }
+  .popup-box .pnote { font-size: 10.5px; color: #555; margin-top: 5px; padding: 5px 8px; background: #f5f5f5; border-left: 3px solid #ccc; border-radius: 0 4px 4px 0; }
+  .help { font-size: 11px; color: #777; line-height: 1.5; margin-top: 4px; }
+  .help code { background: #eee; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<h1>Carte des collecteurs — SCEA Château de Presles</h1>
+<div class="subtitle">Outil interactif d'aide à la décision logistique — ajout de collecteurs et calcul automatique des coûts de transport · Presles-et-Thierny (02860)</div>
+
+<div class="layout">
+  <div>
+    <div class="filter-bar">
+      <span style="font-size:11px;color:#666;">Filtrer :</span>
+      <button class="fb on" onclick="filt('all')" id="f-all" style="color:#444">Tous</button>
+      <button class="fb" onclick="filt('negoce')" id="f-negoce" style="color:#185FA5">Négoce</button>
+      <button class="fb" onclick="filt('coop')" id="f-coop" style="color:#1D9E75">Coopérative</button>
+      <button class="fb" onclick="filt('huilerie')" id="f-huilerie" style="color:#C5891A">Huilerie</button>
+      <button class="fb" onclick="filt('minot')" id="f-minot" style="color:#8B5CF6">Minoterie</button>
+      <button class="fb" onclick="filt('deshy')" id="f-deshy" style="color:#E24B4A">Déshydrateur</button>
+      <button class="fb" onclick="filt('spe')" id="f-spe" style="color:#0F6E56">Spécialisé</button>
+      <button class="fb" onclick="filt('digital')" id="f-digital" style="color:#888">Digital</button>
+    </div>
+    <div id="map-box"><div id="map"></div></div>
+
+    <div class="panel" style="margin-top:12px;">
+      <h3>Analyse logistique — tous collecteurs</h3>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr>
+            <th>Collecteur</th><th>Type</th><th>Dist.</th><th>Camion</th><th>Tracteur</th>
+            <th>Coût camion 25t</th><th>€/t</th><th>Coût tract. 15t</th><th>€/t</th><th>Cultures</th><th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="meth">
+        <strong>Méthode de calcul :</strong> <strong>Camion 25 t :</strong> (1,70 €/km × distance aller-retour) + 80 € forfait. Source CNR 2025.
+        <strong>Tracteur + benne 15 t :</strong> (0,75 €/km × distance A/R) + 25 € forfait. Base tracteur 120 ch (45 €/h) + GNR.
+        Vitesse camion 70 km/h, tracteur 45 km/h. Distance estimée à vol d'oiseau × 1,25 (coefficient routier).
+        Enlèvement ferme = 0 €/t.
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="panel">
+      <h3>➕ Ajouter un collecteur</h3>
+      <div class="field">
+        <label>Nom du collecteur *</label>
+        <input id="in-nom" placeholder="ex. Coopérative Untel — Laon">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Latitude *</label>
+          <input id="in-lat" placeholder="49.564" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label>Longitude *</label>
+          <input id="in-lng" placeholder="3.624" inputmode="decimal">
+        </div>
+      </div>
+      <div class="help">Astuce : sur Google Maps, clic droit sur le lieu → copier les 2 nombres affichés (latitude, longitude).</div>
+      <div class="field" style="margin-top:9px;">
+        <label>Type de collecteur</label>
+        <select id="in-type">
+          <option value="negoce">Négoce</option>
+          <option value="coop">Coopérative</option>
+          <option value="huilerie">Huilerie</option>
+          <option value="minot">Minoterie</option>
+          <option value="deshy">Déshydrateur</option>
+          <option value="spe">Spécialisé</option>
+          <option value="digital">Négoce digital</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Mode de transport</label>
+        <select id="in-transport">
+          <option value="camion">Livraison camion 25 t</option>
+          <option value="tracteur">Tracteur + benne 15 t</option>
+          <option value="ferme">Enlèvement ferme (0 €/t)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Cultures acceptées</label>
+        <input id="in-cultures" placeholder="ex. Blé, Orge, Pois">
+      </div>
+      <div class="field">
+        <label>Note / commentaire</label>
+        <textarea id="in-note" placeholder="ex. Contrat à signer avant semis. Prix intéressant sur le blé meunier."></textarea>
+      </div>
+      <button class="btn btn-add" onclick="addCollecteur()">Ajouter à la carte</button>
+      <button class="btn btn-export" onclick="exportData()">💾 Exporter ma liste (sauvegarde)</button>
+      <div class="help" style="margin-top:6px;">Vos collecteurs ajoutés sont sauvegardés automatiquement dans ce navigateur. L'export génère un fichier de secours.</div>
+    </div>
+
+    <div class="panel">
+      <h3>Légende</h3>
+      <div class="legend"><div class="ld" style="background:#185FA5;border:2px solid #fff;outline:2px solid #185FA5"></div>Ferme Presles-et-Thierny</div>
+      <div class="legend"><div class="ld" style="background:#185FA5"></div>Négoce</div>
+      <div class="legend"><div class="ld" style="background:#1D9E75"></div>Coopérative</div>
+      <div class="legend"><div class="ld" style="background:#C5891A"></div>Huilerie</div>
+      <div class="legend"><div class="ld" style="background:#8B5CF6"></div>Minoterie</div>
+      <div class="legend"><div class="ld" style="background:#E24B4A"></div>Déshydrateur</div>
+      <div class="legend"><div class="ld" style="background:#0F6E56"></div>Spécialisé</div>
+      <div class="legend"><div class="ld" style="background:#888"></div>Négoce digital</div>
+      <div style="margin-top:8px;font-size:11px;color:#777;">Cercle = rayon 35 km · Cliquer un point pour le détail</div>
+      <button class="btn" style="background:#eee;color:#333;margin-top:10px;font-size:11px;" onclick="resetCustom()">↺ Réinitialiser mes ajouts</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════ PARAMÈTRES ════════════
+const FERME = { lat: 49.511, lng: 3.625 };
+const C2KM = 1.70, C2F = 80, CAP_CAMION = 25;
+const T2KM = 0.75, T2F = 25, CAP_BENNE = 15;
+const SPD_CAMION = 70, SPD_TRACT = 45;
+const STORAGE_KEY = 'presles_collecteurs_custom';
+
+const TYPES = {
+  negoce:   { c: '#185FA5', l: 'Négoce',         bg: '#E6F1FB', tx: '#0C447C' },
+  coop:     { c: '#1D9E75', l: 'Coopérative',    bg: '#E1F5EE', tx: '#085041' },
+  huilerie: { c: '#C5891A', l: 'Huilerie',       bg: '#FAEEDA', tx: '#633806' },
+  minot:    { c: '#8B5CF6', l: 'Minoterie',      bg: '#EEEDFE', tx: '#3C3489' },
+  deshy:    { c: '#E24B4A', l: 'Déshydrateur',   bg: '#FCEBEB', tx: '#791F1F' },
+  spe:      { c: '#0F6E56', l: 'Spécialisé',     bg: '#E1F5EE', tx: '#04342C' },
+  digital:  { c: '#888888', l: 'Négoce digital', bg: '#F1EFE8', tx: '#444444' },
+};
+
+// ════════════ COLLECTEURS DE BASE (pré-remplis) ════════════
+const SITES_BASE = [
+  { nom: 'Ternoveo — Nouvion-et-Catillon', lat: 49.702, lng: 3.485, type: 'negoce', transport: 'camion', cultures: 'Blé meunier, Triticale, Orge, Pois, Féverole, Maïs', note: 'Silo le plus proche (~26 km). Négoce Hauts-de-France, leader au nord de Paris. Contrat à signer avant semis.' },
+  { nom: 'Ternoveo — Saint-Quentin', lat: 49.847, lng: 3.287, type: 'negoce', transport: 'camion', cultures: 'Blé meunier, Orge, Triticale, Maïs, Pois', note: 'Plateforme (~48 km). Grande capacité de stockage, intéressant pour différer les ventes.' },
+  { nom: 'Cérésia — Marle (silo)', lat: 49.739, lng: 3.771, type: 'coop', transport: 'camion', cultures: 'Blé, Triticale, Féverole, Orge (bio)', note: 'Priorité N°1 (~20 km). Réception bio confirmée. Livraison camion uniquement. Cérésia organise si lot ≥ 25 t.' },
+  { nom: 'Cérésia — Crépy', lat: 49.604, lng: 3.515, type: 'coop', transport: 'camion', cultures: 'Blé, Orge, Triticale, Féverole, Pois', note: 'Silo proche (~18 km). Philippe Charlier connaît les équipes. Réception bio confirmée.' },
+  { nom: 'Cérésia — Vendeuil', lat: 49.718, lng: 3.352, type: 'coop', transport: 'camion', cultures: 'Blé, Orge, Triticale, Escourgeon, Pois', note: 'Silo (~32 km). Option si Marle/Crépy saturés en pointe récolte.' },
+  { nom: 'Cérésia — Chauny (silo historique)', lat: 49.616, lng: 3.219, type: 'coop', transport: 'camion', cultures: 'Blé meunier, Pois, Orge, Féverole', note: 'Silo historique d\'Aude (~40 km route). Problème : coût si camion non plein.' },
+  { nom: 'Cérésia — Neuilly-Saint-Front', lat: 49.171, lng: 3.262, type: 'coop', transport: 'camion', cultures: 'Blé, Orge, Escourgeon', note: 'Silo au sud (~56 km route). Intérêt si silos nord saturés.' },
+  { nom: 'Cérésia — Vervins (plateforme)', lat: 49.834, lng: 3.907, type: 'coop', transport: 'camion', cultures: 'Blé, Escourgeon, Pois', note: 'Plateforme (~52 km). Alternative si Marle plein.' },
+  { nom: 'Cérésia — Fère-en-Tardenois', lat: 49.201, lng: 3.513, type: 'coop', transport: 'camion', cultures: 'Blé meunier, Triticale', note: 'Plateforme accessible (~44 km). Bonne option blé meunier si Chauny saturé.' },
+  { nom: 'Cérésia — Reims (plateforme)', lat: 49.258, lng: 4.032, type: 'coop', transport: 'camion', cultures: 'Multi-cultures bio', note: 'Grande plateforme (~51 km). Dernier recours si silos proches saturés.' },
+  { nom: 'Cérésia — Walincourt (plateforme)', lat: 50.070, lng: 3.337, type: 'coop', transport: 'camion', cultures: 'Blé, Triticale, Orge, Maïs', note: 'Plateforme Nord (~74 km). Trajet long.' },
+  { nom: 'Cérésia — Vendhuile (plateforme)', lat: 50.013, lng: 3.211, type: 'coop', transport: 'camion', cultures: 'Triticale, Orge', note: 'Plateforme Nord (~74 km). Forte capacité mais loin.' },
+  { nom: 'Cérésia — Jouy-sur-Morin', lat: 48.794, lng: 3.274, type: 'coop', transport: 'camion', cultures: 'Blé, Orge, Maïs', note: 'Très éloignée (~104 km). Peu rentable.' },
+  { nom: 'Cérésia — Amilis (plateforme)', lat: 48.737, lng: 3.134, type: 'coop', transport: 'camion', cultures: 'Blé, Orge', note: 'Éloignée (~119 km). Pour surplus uniquement.' },
+  { nom: 'Cérésia — Beauchery-Saint-Martin', lat: 48.598, lng: 3.416, type: 'coop', transport: 'camion', cultures: 'Blé, Escourgeon', note: 'Très éloignée (~125 km). Dernier recours.' },
+  { nom: 'Cérésia — Coligny (plateforme)', lat: 46.383, lng: 5.346, type: 'coop', transport: 'camion', cultures: 'Blé, Orge', note: 'Plateforme Ain (~462 km). Coût prohibitif. À éviter.' },
+  { nom: 'Talian — Chevresis-Monceau', lat: 49.754, lng: 3.571, type: 'huilerie', transport: 'camion', cultures: 'Tournesol oléique (bio)', note: 'Seule huilerie bio < 50 km. Unique débouché tournesol bio. Prix 700-750 €/t. Contrat pluriannuel recommandé.' },
+  { nom: 'Moulin Hoche — Rozet-Saint-Albin', lat: 49.194, lng: 3.299, type: 'minot', transport: 'camion', cultures: 'Blé meunier bio (≥11% protéines)', note: 'Minoterie bio certifiée (~54 km). Prix supérieur si qualité garantie. Idéal blé après luzerne.' },
+  { nom: 'Farine Morage — Noyelles-sur-Selle', lat: 50.286, lng: 3.386, type: 'minot', transport: 'camion', cultures: 'Blé meunier bio, Épeautre', note: 'Minoterie artisanale 11e génération (~107 km). Négocier prix départ ferme.' },
+  { nom: 'Désialis — Châlons-en-Champagne', lat: 48.980, lng: 4.382, type: 'deshy', transport: 'camion', cultures: 'Luzerne (déshydratée, aliment bétail)', note: 'Déshydrateur luzerne (~120 km). L\'échange paille-fumier avec Carlier reste préférable (0 km).' },
+  { nom: 'Cereapro — Chartres', lat: 48.444, lng: 1.489, type: 'spe', transport: 'ferme', cultures: 'Petit épeautre non décortiqué', note: 'Spécialiste épeautre (~290 km). Transport INCLUS — enlèvement ferme. 700 €/t. Idéal pour les 3 ha d\'épeautre.' },
+  { nom: 'Delivagri — Numérique', lat: 49.50, lng: 3.50, type: 'digital', transport: 'ferme', cultures: 'Toutes cultures bio — prix spot', note: 'Plateforme digitale nationale. Transport à négocier. Idéal niches (lentille, lupin, pois).' },
+];
+
+// ════════════ CALCULS ════════════
+function distKm(a) {
+  const R = 6371;
+  const dLat = (a.lat - FERME.lat) * Math.PI / 180;
+  const dLng = (a.lng - FERME.lng) * Math.PI / 180;
+  const x = Math.sin(dLat/2)**2 + Math.cos(FERME.lat*Math.PI/180)*Math.cos(a.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x)) * 1.25);
+}
+function coutCamion(km) { return Math.round(C2KM * km * 2 + C2F); }
+function coutTract(km)  { return Math.round(T2KM * km * 2 + T2F); }
+function etCamion(km)   { return (coutCamion(km) / CAP_CAMION).toFixed(1); }
+function etTract(km)    { return (coutTract(km) / CAP_BENNE).toFixed(1); }
+function duree(km, spd) {
+  const m = Math.round(km / spd * 60);
+  return m < 60 ? m + ' min' : (Math.floor(m/60) + 'h' + (m%60 ? String(m%60).padStart(2,'0') : ''));
+}
+
+// ════════════ STOCKAGE LOCAL ════════════
+function loadCustom() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch(e) { return []; }
+}
+function saveCustom(arr) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+let customSites = loadCustom();
+
+// ════════════ CARTE ════════════
+let map, allMarkers = [], activeFilter = 'all';
+
+function makeIcon(col, sz) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${col};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.25)"></div>`,
+    iconSize: [sz, sz], iconAnchor: [sz/2, sz/2]
+  });
+}
+
+function allSites() { return SITES_BASE.concat(customSites); }
+
+function popupHtml(s) {
+  const ti = TYPES[s.type];
+  const km = distKm(s);
+  const isFerme = s.transport === 'ferme';
+  const tRows = isFerme
+    ? `<div class="prow"><span>Transport</span><span style="color:#27500A;font-weight:600">Enlèvement ferme — 0 €/t</span></div>`
+    : `<div class="prow"><span>Camion 25 t (A/R)</span><span style="font-weight:600">${coutCamion(km)} € → ${etCamion(km)} €/t</span></div>
+       <div class="prow"><span>Tracteur + benne 15 t</span><span>${coutTract(km)} € → ${etTract(km)} €/t</span></div>`;
+  return `<div class="popup-box">
+    <b>${s.nom}</b>
+    <span class="ptag" style="background:${ti.bg};color:${ti.tx}">${ti.l}</span>
+    <div class="prow"><span>Distance route</span><span style="font-weight:600">~${km} km</span></div>
+    <div class="prow"><span>Durée camion / tracteur</span><span>~${duree(km, SPD_CAMION)} / ~${duree(km, SPD_TRACT)}</span></div>
+    ${tRows}
+    <div class="prow"><span>Cultures</span><span style="color:#555;font-size:10.5px;text-align:right">${s.cultures || '—'}</span></div>
+    ${s.note ? `<div class="pnote" style="border-left-color:${ti.c}">${s.note}</div>` : ''}
+  </div>`;
+}
+
+function drawMarkers() {
+  allMarkers.forEach(m => map.removeLayer(m.marker));
+  allMarkers = [];
+  allSites().forEach(s => {
+    const ti = TYPES[s.type];
+    const km = distKm(s);
+    const sz = 15;
+    const m = L.marker([s.lat, s.lng], { icon: makeIcon(ti.c, sz) });
+    m.bindPopup(popupHtml(s), { maxWidth: 300 });
+    if (km < 120 && s.transport !== 'ferme') {
+      L.polyline([[FERME.lat, FERME.lng], [s.lat, s.lng]], { color: ti.c, weight: 1.2, dashArray: '4,5', opacity: .45 }).addTo(map);
+    }
+    if (activeFilter === 'all' || activeFilter === s.type) m.addTo(map);
+    allMarkers.push({ marker: m, type: s.type });
+  });
+}
+
+function buildTable() {
+  const tb = document.getElementById('tbody');
+  const baseCount = SITES_BASE.length;
+  const sorted = allSites().map((s, i) => ({ s, i })).sort((a, b) => distKm(a.s) - distKm(b.s));
+  tb.innerHTML = sorted.map(({ s, i }) => {
+    const ti = TYPES[s.type];
+    const km = distKm(s);
+    const isFerme = s.transport === 'ferme';
+    const et = parseFloat(etCamion(km));
+    const etCol = isFerme ? '#27500A' : (et < 6 ? '#27500A' : et > 10 ? '#A32D2D' : '#633806');
+    const isCustom = i >= baseCount;
+    const delBtn = isCustom ? `<button class="btn-sm" onclick="delCollecteur(${i - baseCount})">✕</button>` : '';
+    return `<tr>
+      <td style="font-weight:600;color:${ti.c}">${s.nom}${isCustom ? ' <span style="font-size:9px;color:#C5891A">(ajouté)</span>' : ''}</td>
+      <td><span class="pill" style="background:${ti.bg};color:${ti.tx}">${ti.l}</span></td>
+      <td style="font-weight:600">~${km} km</td>
+      <td>~${duree(km, SPD_CAMION)}</td>
+      <td style="color:#777">~${duree(km, SPD_TRACT)}</td>
+      <td>${isFerme ? '<span style="color:#27500A">0 €</span>' : coutCamion(km) + ' €'}</td>
+      <td style="font-weight:600;color:${etCol}">${isFerme ? '0,0' : etCamion(km)}</td>
+      <td style="color:#777">${isFerme ? '—' : coutTract(km) + ' €'}</td>
+      <td style="color:#777">${isFerme ? '—' : etTract(km)}</td>
+      <td style="font-size:10.5px;color:#777">${s.cultures || '—'}</td>
+      <td>${delBtn}</td>
+    </tr>`;
+  }).join('');
+}
+
+function refresh() { drawMarkers(); buildTable(); }
+
+function filt(f) {
+  activeFilter = f;
+  document.querySelectorAll('.fb').forEach(b => b.classList.remove('on'));
+  document.getElementById('f-' + f).classList.add('on');
+  drawMarkers();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ════════════ AJOUT / SUPPRESSION ════════════
+function addCollecteur() {
+  const nom = document.getElementById('in-nom').value.trim();
+  const lat = parseFloat(document.getElementById('in-lat').value.replace(',', '.'));
+  const lng = parseFloat(document.getElementById('in-lng').value.replace(',', '.'));
+  const type = document.getElementById('in-type').value;
+  const transport = document.getElementById('in-transport').value;
+  const cultures = document.getElementById('in-cultures').value.trim();
+  const note = document.getElementById('in-note').value.trim();
+
+  if (!nom) { showToast('⚠ Le nom est obligatoire'); return; }
+  if (isNaN(lat) || isNaN(lng)) { showToast('⚠ Latitude et longitude valides requises'); return; }
+  if (lat < 40 || lat > 52 || lng < -5 || lng > 9) {
+    if (!confirm('Les coordonnées semblent hors de France. Ajouter quand même ?')) return;
+  }
+
+  customSites.push({ nom, lat, lng, type, transport, cultures, note });
+  saveCustom(customSites);
+  refresh();
+
+  // reset form
+  ['in-nom', 'in-lat', 'in-lng', 'in-cultures', 'in-note'].forEach(id => document.getElementById(id).value = '');
+  map.setView([lat, lng], 9);
+  showToast('✅ ' + nom + ' ajouté (' + distKm({lat, lng}) + ' km)');
+}
+
+function delCollecteur(idx) {
+  if (!confirm('Supprimer "' + customSites[idx].nom + '" ?')) return;
+  customSites.splice(idx, 1);
+  saveCustom(customSites);
+  refresh();
+  showToast('Collecteur supprimé');
+}
+
+function resetCustom() {
+  if (!confirm('Supprimer TOUS vos collecteurs ajoutés manuellement ? (les collecteurs de base sont conservés)')) return;
+  customSites = [];
+  saveCustom(customSites);
+  refresh();
+  showToast('Ajouts réinitialisés');
+}
+
+function exportData() {
+  if (customSites.length === 0) { showToast('Aucun collecteur ajouté à exporter'); return; }
+  const blob = new Blob([JSON.stringify(customSites, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'collecteurs_presles_ajouts.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('💾 Liste exportée (' + customSites.length + ' collecteurs)');
+}
+
+// ════════════ INIT ════════════
+window.addEventListener('load', () => {
+  map = L.map('map', { zoomControl: true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap', maxZoom: 18
+  }).addTo(map);
+
+  // Ferme
+  L.marker([FERME.lat, FERME.lng], {
+    icon: L.divIcon({
+      className: '',
+      html: `<div style="width:22px;height:22px;border-radius:50%;background:white;border:3px solid #185FA5;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3)"><div style="width:10px;height:10px;border-radius:50%;background:#185FA5"></div></div>`,
+      iconSize: [22, 22], iconAnchor: [11, 11]
+    })
+  }).addTo(map).bindPopup(`<div class="popup-box"><b>🏡 Ferme SCEA Château de Presles</b><div style="font-size:11px;color:#555;margin-top:4px">Presles-et-Thierny (02860) · 189 ha · Aude CHARLIER<br>Point de départ pour tous les calculs de distance</div></div>`);
+
+  L.circle([FERME.lat, FERME.lng], { radius: 35000, color: '#185FA5', fillColor: '#E6F1FB', fillOpacity: .1, weight: 1.5, dashArray: '5,4' }).addTo(map);
+
+  map.setView([49.45, 3.55], 8);
+  refresh();
+});
+</script>
+</body>
+</html>
